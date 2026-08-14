@@ -340,3 +340,4 @@ hydrogen/ui/hydrogen-space-dock.patch
 hydrogen/ui/hydrogen-space-dock-accent-menu.patch
 hydrogen/core/rebrand-arcvm-kiosk.patch
 hydrogen/core/rebrand-helium-comments.patch
+hydrogen/ui/hydrogen-default-theme.patch

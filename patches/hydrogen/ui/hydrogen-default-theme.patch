@@ -1,0 +1,171 @@
+--- a/chrome/browser/ui/color/material_chrome_color_mixer.cc
++++ b/chrome/browser/ui/color/material_chrome_color_mixer.cc
+@@ -477,28 +477,42 @@ void AddMaterialChromeColorMixer(ui::ColorProvider* provider,
+   mixer[kColorHoverCardTabAlertAudioPlayingIcon] = {
+       ui::kColorSysOnSurfaceSubtle};
+ 
+-  // Toolbar colors.
+-  mixer[kColorToolbar] = {dark_mode ? ui::kColorFrameActive
+-                                    : ui::kColorSysBase};
++  // Toolbar colors. The default (light) theme uses the Hydrogen blue so that
++  // a fresh profile starts with an on-brand blue frame and toolbar.
++  constexpr SkColor kHydrogenBlue = SkColorSetRGB(0x36, 0x40, 0xB2);
++  constexpr SkColor kToolbarOnBlue = SK_ColorWHITE;
++  mixer[kColorToolbar] = {dark_mode ? ui::ColorTransform(ui::kColorFrameActive)
++                                    : kHydrogenBlue};
+   mixer[kColorToolbarButtonBackgroundHighlightedDefault] = {
+-      ui::kColorSysStateHoverOnSubtle};
++      dark_mode ? ui::ColorTransform(ui::kColorSysStateHoverOnSubtle)
++                : ui::ColorTransform(ui::SetAlpha(kToolbarOnBlue, 0x14))};
+   mixer[kColorToolbarButtonBorder] = {ui::kColorSysOutline};
+   mixer[kColorToolbarButtonIcon] = {kColorToolbarButtonIconDefault};
+-  mixer[kColorToolbarButtonIconDefault] = {ui::kColorSysOnSurfaceSecondary};
++  mixer[kColorToolbarButtonIconDefault] = {
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnSurfaceSecondary)
++                : kToolbarOnBlue};
+   mixer[kColorToolbarButtonIconDisabled] = {ui::kColorSysStateDisabled};
+   mixer[kColorToolbarButtonIconHovered] = {kColorToolbarButtonIcon};
+-  mixer[kColorToolbarButtonIconInactive] = {ui::GetResultingPaintColor(
+-      {ui::kColorSysStateDisabled}, {kColorToolbar})};
++  mixer[kColorToolbarButtonIconInactive] = {
++      dark_mode ? ui::GetResultingPaintColor({ui::kColorSysStateDisabled},
++                                             {kColorToolbar})
++                : ui::SetAlpha(kToolbarOnBlue, 0x66)};
+   mixer[kColorToolbarButtonIconPressed] = {kColorToolbarButtonIconHovered};
+-  mixer[kColorToolbarButtonText] = {ui::kColorSysOnSurfaceSecondary};
++  mixer[kColorToolbarButtonText] = {
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnSurfaceSecondary)
++                : kToolbarOnBlue};
+   mixer[kColorToolbarContentAreaSeparator] = {
+       dark_mode ? ui::GetResultingPaintColor({ui::kColorSysStateHoverOnSubtle},
+                                              {kColorToolbar})
+-                : ui::kColorSysSurfaceVariant};
++                : ui::SetAlpha(kToolbarOnBlue, 0x33)};
+   mixer[kColorToolbarFeaturePromoHighlight] = {ui::kColorSysPrimary};
+   mixer[kColorToolbarIconContainerBorder] = {ui::kColorSysNeutralOutline};
+-  mixer[kColorToolbarInkDropHover] = {ui::kColorSysStateHoverOnSubtle};
+-  mixer[kColorToolbarInkDropRipple] = {ui::kColorSysStateRippleNeutralOnSubtle};
++  mixer[kColorToolbarInkDropHover] = {
++      dark_mode ? ui::ColorTransform(ui::kColorSysStateHoverOnSubtle)
++                : ui::SetAlpha(kToolbarOnBlue, 0x14)};
++  mixer[kColorToolbarInkDropRipple] = {
++      dark_mode ? ui::ColorTransform(ui::kColorSysStateRippleNeutralOnSubtle)
++                : ui::SetAlpha(kToolbarOnBlue, 0x33)};
+   mixer[kColorToolbarExtensionSeparatorEnabled] = {ui::kColorSysDivider};
+   mixer[kColorToolbarExtensionSeparatorDisabled] = {
+       kColorToolbarButtonIconInactive};
+@@ -509,7 +523,9 @@ void AddMaterialChromeColorMixer(ui::ColorProvider* provider,
+   mixer[kColorToolbarSeparatorDefault] =
+       ui::AlphaBlend(kColorToolbarButtonIcon, toolbar_separator_bg, 0x3A);
+   mixer[kColorToolbarText] = {kColorToolbarTextDefault};
+-  mixer[kColorToolbarTextDefault] = {ui::kColorSysOnSurfaceSecondary};
++  mixer[kColorToolbarTextDefault] = {
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnSurfaceSecondary)
++                : kToolbarOnBlue};
+   mixer[kColorToolbarTextDisabled] = {kColorToolbarTextDisabledDefault};
+   mixer[kColorToolbarTextDisabledDefault] = {ui::kColorSysStateDisabled};
+ 
+--- a/chrome/browser/ui/color/material_tab_strip_color_mixer.cc
++++ b/chrome/browser/ui/color/material_tab_strip_color_mixer.cc
+@@ -64,11 +64,14 @@ void AddMaterialTabStripColorMixer(ui::ColorProvider* provider,
+   mixer[kColorTabDiscardRingFrameActive] = {ui::kColorSysStateInactiveRing};
+   mixer[kColorTabDiscardRingFrameInactive] = {kColorTabDiscardRingFrameActive};
+ #endif
++  // In light (default) mode the tab strip sits on the Hydrogen-blue toolbar,
++  // so inactive tab foregrounds use white for readability.
+   mixer[kColorTabForegroundActiveFrameActive] = {ui::kColorSysOnSurface};
+   mixer[kColorTabForegroundActiveFrameInactive] = {
+       kColorTabForegroundActiveFrameActive};
+   mixer[kColorTabForegroundInactiveFrameActive] = {
+-      ui::kColorSysOnSurfaceSecondary};
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnSurfaceSecondary)
++                : SK_ColorWHITE};
+   mixer[kColorTabForegroundInactiveFrameInactive] = {
+       kColorTabForegroundInactiveFrameActive};
+   mixer[kColorTabCloseButtonFocusRingInactive] = {
+@@ -76,19 +79,25 @@ void AddMaterialTabStripColorMixer(ui::ColorProvider* provider,
+   mixer[kColorTabFocusRingInactive] = {ui::kColorSysStateFocusRing};
+ 
+   // TabDivider colors.
+-  mixer[kColorTabDividerFrameActive] = {ui::kColorSysOnHeaderDivider};
++  mixer[kColorTabDividerFrameActive] = {
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnHeaderDivider)
++                : ui::SetAlpha(SK_ColorWHITE, 0x40)};
+   mixer[kColorTabDividerFrameInactive] = {ui::kColorSysOnHeaderDividerInactive};
+ 
+   // Tabstrip Control Button colors.
+   mixer[kColorNewTabButtonCRForegroundFrameActive] = {
+-      ui::kColorSysOnSurfaceSubtle};
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnSurfaceSubtle)
++                : SK_ColorWHITE};
+   mixer[kColorNewTabButtonCRForegroundFrameInactive] = {
+-      ui::kColorSysOnSurfaceSubtle};
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnSurfaceSubtle)
++                : SK_ColorWHITE};
+   mixer[kColorNewTabButtonCRBackgroundFrameActive] = {kColorToolbar};
+   mixer[kColorNewTabButtonCRBackgroundFrameInactive] = {kColorToolbar};
+ 
+   mixer[kColorTabSearchButtonCRForegroundFrameActive] = {
+-      ui::kColorSysOnSurfacePrimary};
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnSurfacePrimary)
++                : SK_ColorWHITE};
+   mixer[kColorTabSearchButtonCRForegroundFrameInactive] = {
+-      ui::kColorSysOnSurfacePrimaryInactive};
++      dark_mode ? ui::ColorTransform(ui::kColorSysOnSurfacePrimaryInactive)
++                : SK_ColorWHITE};
+ }
+--- a/ui/color/core_default_color_mixer.cc
++++ b/ui/color/core_default_color_mixer.cc
+@@ -25,7 +25,8 @@ void AddCoreDefaultColorMixer(ColorProvider* provider,
+   DVLOG(2) << "Adding CoreDefaultColorMixer to ColorProvider for "
+            << (dark_mode ? "Dark" : "Light") << " window.";
+   ColorMixer& mixer = provider->AddMixer();
+-  mixer[kColorAccent] = {dark_mode ? gfx::kGoogleBlue300 : gfx::kGoogleBlue600};
++  mixer[kColorAccent] = {dark_mode ? gfx::kGoogleBlue300
++                                   : SkColorSetRGB(0x36, 0x40, 0xB2)};
+   // 4.5 and 7.0 approximate the default light and dark theme contrasts of
+   // accent-against-primary-background.
+   mixer[kColorAccentWithGuaranteedContrastAtopPrimaryBackground] =
+--- a/ui/color/sys_color_mixer.cc
++++ b/ui/color/sys_color_mixer.cc
+@@ -83,8 +83,11 @@ void AddGrayscaleSysColorOverrides(ColorMixer& mixer,
+                                        : kColorRefNeutral92};
+ 
+   // Chrome surfaces.
+-  mixer[kColorSysHeader] = {dark_mode ? kColorRefNeutral12
+-                                      : kColorRefNeutral92};
++  // The default (light) Hydrogen theme uses the brand blue for the frame and
++  // header, with white on-header foregrounds for readability.
++  constexpr SkColor kHydrogenBlue = SkColorSetRGB(0x36, 0x40, 0xB2);
++  mixer[kColorSysHeader] = {dark_mode ? ColorTransform(kColorRefNeutral12)
++                                      : kHydrogenBlue};
+   mixer[kColorSysHeaderInactive] = {
+       dark_mode ? AlphaBlend({kColorSysHeader}, {kColorRefNeutral25}, 0x99)
+                 : AlphaBlend({kColorSysHeader}, {kColorRefNeutral98}, 0x48)};
+@@ -92,8 +95,10 @@ void AddGrayscaleSysColorOverrides(ColorMixer& mixer,
+                                                : kColorRefNeutral95};
+   mixer[kColorSysOnHeaderDivider] = {dark_mode ? kColorRefNeutral25
+                                                : kColorRefNeutral80};
+-  mixer[kColorSysOnHeaderPrimary] = {dark_mode ? kColorRefNeutral80
+-                                               : kColorRefNeutral40};
++  mixer[kColorSysOnHeaderPrimary] = {dark_mode ? ColorTransform(kColorRefNeutral80)
++                                               : SK_ColorWHITE};
++  mixer[kColorSysOnHeaderPrimaryInactive] = {dark_mode ? kColorRefNeutral80
++                                                       : kColorRefNeutral95};
+ 
+   // Toned divider.
+   mixer[kColorSysSurfaceVariant] = {dark_mode ? kColorRefNeutral40
+@@ -103,10 +108,10 @@ void AddGrayscaleSysColorOverrides(ColorMixer& mixer,
+   mixer[kColorSysStateInactiveRing] = {
+       dark_mode ? SetAlpha({kColorRefNeutral70}, 0x8C)
+                 : SetAlpha({kColorRefNeutral20}, 0x8C)};
+-  mixer[kColorSysStateOnHeaderHover] = {dark_mode ? kColorRefNeutral90
+-                                                  : kColorRefNeutral20};
++  mixer[kColorSysStateOnHeaderHover] = {dark_mode ? ColorTransform(kColorRefNeutral90)
++                                                  : SK_ColorWHITE};
+   mixer[kColorSysStateHeaderHover] = {dark_mode ? kColorRefNeutral30
+-                                                : kColorRefNeutral80};
++                                                : SetAlpha(SK_ColorWHITE, 0x1F)};
+ 
+   // Experimentation.
+   mixer[kColorSysOmniboxContainer] = {dark_mode ? kColorRefNeutral15
