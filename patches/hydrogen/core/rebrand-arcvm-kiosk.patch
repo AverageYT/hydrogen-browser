@@ -1,0 +1,172 @@
+--- a/ash/constants/ash_features.cc
++++ b/ash/constants/ash_features.cc
+@@ -981,12 +981,12 @@
+ // information from `cros_healthd`.
+ BASE_FEATURE(kHealthdInternalsTabs, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+-// Enables Kiosk session for the Helium android app.
+-BASE_FEATURE(kHeliumArcvmKiosk, base::FEATURE_DISABLED_BY_DEFAULT);
++// Enables Kiosk session for the Hydrogen android app.
++BASE_FEATURE(kHydrogenArcvmKiosk, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ // Enables additional features (e.g. manual launch) for ARCVM Kiosk debugging.
+ // Should stay disabled by default.
+-BASE_FEATURE(kHeliumArcvmKioskDevMode, base::FEATURE_DISABLED_BY_DEFAULT);
++BASE_FEATURE(kHydrogenArcvmKioskDevMode, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ // If enabled, the Help app will render the App Detail Page and entry point.
+ BASE_FEATURE(kHelpAppAppDetailPage, base::FEATURE_ENABLED_BY_DEFAULT);
+@@ -2745,13 +2745,13 @@
+   return base::FeatureList::IsEnabled(kHealthdInternalsTabs);
+ }
+ 
+-bool IsHeliumArcvmKioskEnabled() {
+-  return base::FeatureList::IsEnabled(kHeliumArcvmKiosk);
++bool IsHydrogenArcvmKioskEnabled() {
++  return base::FeatureList::IsEnabled(kHydrogenArcvmKiosk);
+ }
+ 
+-bool IsHeliumArcvmKioskDevModeEnabled() {
+-  return IsHeliumArcvmKioskEnabled() &&
+-         base::FeatureList::IsEnabled(kHeliumArcvmKioskDevMode);
++bool IsHydrogenArcvmKioskDevModeEnabled() {
++  return IsHydrogenArcvmKioskEnabled() &&
++         base::FeatureList::IsEnabled(kHydrogenArcvmKioskDevMode);
+ }
+ 
+ bool IsHideShelfControlsInTabletModeEnabled() {
+--- a/ash/constants/ash_features.h
++++ b/ash/constants/ash_features.h
+@@ -472,7 +472,7 @@
+ COMPONENT_EXPORT(ASH_CONSTANTS)
+ BASE_DECLARE_FEATURE(kHealthdInternalsTabs);
+ COMPONENT_EXPORT(ASH_CONSTANTS)
+-BASE_DECLARE_FEATURE(kHeliumArcvmKiosk);
++BASE_DECLARE_FEATURE(kHydrogenArcvmKiosk);
+ COMPONENT_EXPORT(ASH_CONSTANTS)
+ BASE_DECLARE_FEATURE(kHelpAppAppDetailPage);
+ COMPONENT_EXPORT(ASH_CONSTANTS)
+@@ -1152,8 +1152,8 @@
+ COMPONENT_EXPORT(ASH_CONSTANTS)
+ bool AreAnyGlanceablesTimeManagementViewsEnabled();
+ COMPONENT_EXPORT(ASH_CONSTANTS) bool AreHealthdInternalsTabsEnabled();
+-COMPONENT_EXPORT(ASH_CONSTANTS) bool IsHeliumArcvmKioskEnabled();
+-COMPONENT_EXPORT(ASH_CONSTANTS) bool IsHeliumArcvmKioskDevModeEnabled();
++COMPONENT_EXPORT(ASH_CONSTANTS) bool IsHydrogenArcvmKioskEnabled();
++COMPONENT_EXPORT(ASH_CONSTANTS) bool IsHydrogenArcvmKioskDevModeEnabled();
+ COMPONENT_EXPORT(ASH_CONSTANTS) bool IsHideShelfControlsInTabletModeEnabled();
+ COMPONENT_EXPORT(ASH_CONSTANTS) bool IsHostnameSettingEnabled();
+ COMPONENT_EXPORT(ASH_CONSTANTS) bool IsInputNoiseCancellationUiEnabled();
+--- a/chrome/browser/ash/app_mode/arcvm_app/kiosk_arcvm_app_manager.cc
++++ b/chrome/browser/ash/app_mode/arcvm_app/kiosk_arcvm_app_manager.cc
+@@ -79,7 +79,7 @@
+ }
+ 
+ KioskAppManagerBase::AppList KioskArcvmAppManager::GetApps() const {
+-  if (!ash::features::IsHeliumArcvmKioskDevModeEnabled()) {
++  if (!ash::features::IsHydrogenArcvmKioskDevModeEnabled()) {
+     return {};
+   }
+ 
+@@ -146,7 +146,7 @@
+   // Do not populate ARC kiosk apps if ARC kiosk apps can't be run on the
+   // device.
+   // Apps won't be added to kiosk Apps menu and won't be auto-launched.
+-  if (!arc::IsArcAvailable() || !ash::features::IsHeliumArcvmKioskEnabled()) {
++  if (!arc::IsArcAvailable() || !ash::features::IsHydrogenArcvmKioskEnabled()) {
+     VLOG(1) << "Device doesn't support ARC kiosk";
+     return;
+   }
+--- a/chrome/browser/ash/app_mode/test/kiosk_arcvm_app_manager_browsertest.cc
++++ b/chrome/browser/ash/app_mode/test/kiosk_arcvm_app_manager_browsertest.cc
+@@ -74,7 +74,7 @@
+ class KioskArcvmAppManagerTest : public InProcessBrowserTest {
+  public:
+   KioskArcvmAppManagerTest() : settings_helper_(false) {
+-    feature_list_.InitAndEnableFeature(features::kHeliumArcvmKiosk);
++    feature_list_.InitAndEnableFeature(features::kHydrogenArcvmKiosk);
+   }
+   KioskArcvmAppManagerTest(const KioskArcvmAppManagerTest&) = delete;
+   KioskArcvmAppManagerTest& operator=(const KioskArcvmAppManagerTest&) = delete;
+--- a/chrome/browser/ash/dbus/ash_dbus_helper.cc
++++ b/chrome/browser/ash/dbus/ash_dbus_helper.cc
+@@ -272,7 +272,7 @@
+     InitializeDBusClient<HumanPresenceDBusClient>(bus);
+   }
+ 
+-  if (features::IsHeliumArcvmKioskEnabled()) {
++  if (features::IsHydrogenArcvmKioskEnabled()) {
+     InitializeDBusClient<ZrVendorOsClient>(bus);
+   }
+ 
+@@ -288,7 +288,7 @@
+ 
+   // Feature list-dependent D-Bus clients are shut down first because we try to
+   // shut down in reverse order of initialization (in case of dependencies).
+-  if (features::IsHeliumArcvmKioskEnabled()) {
++  if (features::IsHydrogenArcvmKioskEnabled()) {
+     ZrVendorOsClient::Shutdown();
+   }
+   if (features::IsSnoopingProtectionEnabled() ||
+--- a/chrome/browser/ash/policy/core/device_policy_decoder.cc
++++ b/chrome/browser/ash/policy/core/device_policy_decoder.cc
+@@ -759,7 +759,7 @@
+           entry.isolated_kiosk_app().allow_downgrades());
+     }
+   }
+-  if (ash::features::IsHeliumArcvmKioskEnabled()) {
++  if (ash::features::IsHydrogenArcvmKioskEnabled()) {
+     if (entry.arcvm_kiosk_app().has_package_name()) {
+       entry_dict.Set(ash::kAccountsPrefDeviceLocalAccountsKeyArcvmKioskPackage,
+                      entry.arcvm_kiosk_app().package_name());
+--- a/chrome/browser/ash/policy/status_collector/device_status_collector.cc
++++ b/chrome/browser/ash/policy/status_collector/device_status_collector.cc
+@@ -667,7 +667,7 @@
+       return em::ActiveTimePeriod::SESSION_IWA_KIOSK;
+ 
+     case DeviceLocalAccountType::kArcvmKioskApp:
+-      if (ash::features::IsHeliumArcvmKioskEnabled()) {
++      if (ash::features::IsHydrogenArcvmKioskEnabled()) {
+         return em::ActiveTimePeriod::SESSION_ARC_KIOSK;
+       }
+       break;
+@@ -2746,7 +2746,7 @@
+       running_kiosk_app->set_app_id(account->kiosk_iwa_info.web_bundle_id());
+       break;
+     case DeviceLocalAccountType::kArcvmKioskApp:
+-      if (ash::features::IsHeliumArcvmKioskEnabled()) {
++      if (ash::features::IsHydrogenArcvmKioskEnabled()) {
+         // Use package name as app ID for ARC Kiosks.
+         running_kiosk_app->set_app_id(
+             account->arcvm_kiosk_app_info.package_name());
+@@ -3045,7 +3045,7 @@
+       app_status->set_app_id(account->kiosk_iwa_info.web_bundle_id());
+       break;
+     case DeviceLocalAccountType::kArcvmKioskApp:
+-      if (ash::features::IsHeliumArcvmKioskEnabled()) {
++      if (ash::features::IsHydrogenArcvmKioskEnabled()) {
+         // Use package name as app ID for ARC Kiosks.
+         app_status->set_app_id(account->arcvm_kiosk_app_info.package_name());
+       }
+--- a/chrome/browser/ash/settings/device_settings_provider.cc
++++ b/chrome/browser/ash/settings/device_settings_provider.cc
+@@ -434,7 +434,7 @@
+         entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyKioskAppUpdateURL,
+                        entry.kiosk_app().update_url());
+       }
+-      if (ash::features::IsHeliumArcvmKioskEnabled()) {
++      if (ash::features::IsHydrogenArcvmKioskEnabled()) {
+         if (entry.arcvm_kiosk_app().has_package_name()) {
+           entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyArcvmKioskPackage,
+                          entry.arcvm_kiosk_app().package_name());
+--- a/chrome/browser/ui/ash/login/kiosk_app_menu_controller.cc
++++ b/chrome/browser/ui/ash/login/kiosk_app_menu_controller.cc
+@@ -105,7 +105,7 @@
+   kiosk_observations_.AddObservation(KioskChromeAppManager::Get());
+   kiosk_observations_.AddObservation(KioskWebAppManager::Get());
+   kiosk_observations_.AddObservation(KioskIwaManager::Get());
+-  if (ash::features::IsHeliumArcvmKioskEnabled()) {
++  if (ash::features::IsHydrogenArcvmKioskEnabled()) {
+     kiosk_observations_.AddObservation(KioskArcvmAppManager::Get());
+   }
+ }

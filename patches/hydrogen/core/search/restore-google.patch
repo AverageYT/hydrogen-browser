@@ -1,0 +1,11 @@
+--- a/components/search_engines/search_engine_utils.cc
++++ b/components/search_engines/search_engine_utils.cc
+@@ -52,7 +52,7 @@ SearchEngineType GetEngineType(const GUR
+   // incoming URL's host is "[*.]google.<TLD>".
+   if (google_util::IsGoogleDomainUrl(url, google_util::DISALLOW_SUBDOMAIN,
+                                      google_util::ALLOW_NON_STANDARD_PORTS))
+-    return TemplateURLPrepopulateData::google.type;
++    return SEARCH_ENGINE_OTHER;
+ 
+   // Now check the rest of the prepopulate data.
+   const auto& all_engines = regional_capabilities::GetAllPrepopulatedEngines();

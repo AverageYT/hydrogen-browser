@@ -1,0 +1,114 @@
+--- a/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.h
++++ b/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.h
+@@ -56,6 +56,7 @@
+       ui::mojom::MenuSourceType source_type) override;
+ 
+   // ui::SimpleMenuModel::Delegate:
++  bool IsCommandIdChecked(int command_id) const override;
+   void ExecuteCommand(int command_id, int event_flags) override;
+   void OnMenuClosed(ui::SimpleMenuModel* source) override;
+ 
+@@ -75,6 +76,7 @@
+     void SetActive(bool is_active);
+ 
+     const std::string& space_id() const { return space_id_; }
++    SkColor accent_color() const { return accent_color_; }
+ 
+     // views::Button:
+     void OnPaint(gfx::Canvas* canvas) override;
+@@ -99,8 +101,10 @@
+ 
+   raw_ptr<views::LabelButton> add_button_ = nullptr;
+   std::unique_ptr<ui::SimpleMenuModel> context_menu_model_;
++  std::unique_ptr<ui::SimpleMenuModel> accent_submenu_model_;
+   std::unique_ptr<views::MenuRunner> context_menu_runner_;
+   std::string context_menu_space_id_;
++  SkColor context_menu_accent_color_ = SK_ColorTRANSPARENT;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_HYDROGEN_HYDROGEN_SPACE_DOCK_VIEW_H_
+--- a/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.cc
++++ b/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.cc
+@@ -12,7 +12,6 @@
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h"
+ #include "chrome/browser/ui/views/hydrogen/frame_corner_radius.h"
+-#include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/mojom/menu_source_type.mojom.h"
+ #include "ui/gfx/canvas.h"
+@@ -32,6 +31,8 @@
+ constexpr int kDockBetweenChildSpacing = 4;
+ constexpr float kDockTintAlpha = 0.14f;
+ constexpr int kDeleteSpaceCommandId = 1;
++constexpr int kAccentMenuSubmenuCommandId = 99;
++constexpr int kAccentMenuCommandIdStart = 100;
+ 
+ // Accent palette cycled through for newly created spaces.
+ constexpr SkColor kNewSpaceAccents[] = {
+@@ -43,6 +44,10 @@
+     SkColorSetARGB(0xFF, 0x00, 0xB5, 0xAD),  // teal
+ };
+ 
++constexpr char16_t kAccentColorNames[][8] = {
++    u"Blue", u"Green", u"Amber", u"Violet", u"Pink", u"Teal",
++};
++
+ SkColor NextSpaceAccent(size_t space_count) {
+   if (space_count == 0) {
+     return kNewSpaceAccents[0];
+@@ -167,10 +172,17 @@
+   context_menu_space_id_ = dot->space_id();
+ 
+   context_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
+-  context_menu_model_->AddItem(
+-      kDeleteSpaceCommandId,
+-      l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_DELETE_GROUP));
++  accent_submenu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
++  for (size_t i = 0; i < std::size(kNewSpaceAccents); ++i) {
++    accent_submenu_model_->AddCheckItem(kAccentMenuCommandIdStart + i,
++                                        kAccentColorNames[i]);
++  }
++  context_menu_model_->AddSubMenu(kAccentMenuSubmenuCommandId, u"Accent color",
++                                  accent_submenu_model_.get());
++  context_menu_model_->AddItem(kDeleteSpaceCommandId, u"Delete space");
+ 
++  context_menu_accent_color_ = dot->accent_color();
++
+   context_menu_runner_ = std::make_unique<views::MenuRunner>(
+       context_menu_model_.get(), views::MenuRunner::CONTEXT_MENU |
+                                      views::MenuRunner::IS_NESTED);
+@@ -180,7 +192,25 @@
+       source_type);
+ }
+ 
++bool HydrogenSpaceDockView::IsCommandIdChecked(int command_id) const {
++  if (command_id < kAccentMenuCommandIdStart ||
++      command_id >= kAccentMenuCommandIdStart +
++                        static_cast<int>(std::size(kNewSpaceAccents))) {
++    return false;
++  }
++  return context_menu_accent_color_ ==
++         kNewSpaceAccents[command_id - kAccentMenuCommandIdStart];
++}
++
+ void HydrogenSpaceDockView::ExecuteCommand(int command_id, int event_flags) {
++  if (command_id >= kAccentMenuCommandIdStart &&
++      command_id < kAccentMenuCommandIdStart +
++                       static_cast<int>(std::size(kNewSpaceAccents))) {
++    spaces_controller_->SetSpaceAccentColor(
++        context_menu_space_id_,
++        kNewSpaceAccents[command_id - kAccentMenuCommandIdStart]);
++    return;
++  }
+   if (command_id == kDeleteSpaceCommandId) {
+     DeleteSpace(context_menu_space_id_);
+   }
+@@ -189,6 +219,7 @@
+ void HydrogenSpaceDockView::OnMenuClosed(ui::SimpleMenuModel* source) {
+   context_menu_runner_.reset();
+   context_menu_model_.reset();
++  accent_submenu_model_.reset();
+ }
+ 
+ void HydrogenSpaceDockView::RebuildDots() {

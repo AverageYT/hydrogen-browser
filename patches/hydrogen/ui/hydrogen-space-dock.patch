@@ -1,0 +1,609 @@
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -4102,6 +4102,8 @@
+       "views/global_error_bubble_view.h",
+       "views/hydrogen/frame_corner_radius.cc",
+       "views/hydrogen/frame_corner_radius.h",
++      "views/hydrogen/hydrogen_space_dock_view.cc",
++      "views/hydrogen/hydrogen_space_dock_view.h",
+       "views/hydrogen/native_frame_materials.cc",
+       "views/hydrogen/native_frame_materials.h",
+       "views/hung_renderer_view.cc",
+
+diff --git a/chrome/browser/ui/views/frame/browser_view.h b/chrome/browser/ui/views/frame/browser_view.h
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -943,6 +943,11 @@
+   void OnToolbarTabStripStateChanged(HydrogenLayoutStateController* controller);
+ 
+   void OnProjectsPanelStateChanged(ProjectsPanelStateController* controller);
++
++  // Spaces helpers.
++  void OnSpacesStateChanged();
++  void UpdateSpacesEventMonitor();
++  void HandleSpacesWheelEvent(const ui::MouseWheelEvent* event);
+ 
+   // Zen mode helpers.
+   void OnZenModeSideChromePinnedPrefChanged();
+@@ -1451,6 +1456,7 @@
+   PrefChangeRegistrar registrar_;
+ 
+   base::CallbackListSubscription hydrogen_layout_subscription_;
++  base::CallbackListSubscription hydrogen_spaces_subscription_;
+ 
+   base::CallbackListSubscription vertical_tab_subscription_;
+ 
+@@ -1476,12 +1482,17 @@
+ 
+   // Zen mode state.
+   std::unique_ptr<views::EventMonitor> zen_mode_event_monitor_;
++  std::unique_ptr<views::EventMonitor> spaces_event_monitor_;
+   gfx::SlideAnimation zen_top_chrome_animation_;
+   gfx::SlideAnimation zen_side_chrome_animation_;
+   base::OneShotTimer zen_cursor_exit_timer_;
+   std::optional<gfx::Point> zen_last_cursor_;
+   bool zen_mode_enabled_ = false;
+ 
++  // Space-switch swipe state.
++  base::TimeTicks last_spaces_switch_timestamp_;
++  int spaces_swipe_accumulated_offset_ = 0;
++
+   mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
+ };
+ 
+
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -102,6 +102,7 @@
+ #include "chrome/browser/ui/find_bar/find_bar.h"
+ #include "chrome/browser/ui/focus/browser_focus_controller.h"
+ #include "chrome/browser/ui/fullscreen/browser_window_fullscreen_controller.h"
++#include "chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/omnibox/omnibox_next_features.h"
+@@ -1887,7 +1888,81 @@
+     zen_mode_event_monitor_ = views::EventMonitor::CreateWindowMonitor(
+         this, GetWidget()->GetNativeWindow(),
+         {ui::EventType::kMouseMoved, ui::EventType::kMouseExited});
++  }
++}
++
++void BrowserView::OnSpacesStateChanged() {
++  UpdateSpacesEventMonitor();
++}
++
++void BrowserView::UpdateSpacesEventMonitor() {
++  auto* controller = HydrogenSpacesController::From(browser_);
++  const bool spaces_enabled = controller && controller->IsEnabled();
++  if (!GetWidget() || !spaces_enabled) {
++    spaces_event_monitor_.reset();
++    spaces_swipe_accumulated_offset_ = 0;
++    return;
++  }
++
++  if (!spaces_event_monitor_) {
++    spaces_event_monitor_ = views::EventMonitor::CreateWindowMonitor(
++        this, GetWidget()->GetNativeWindow(),
++        {ui::EventType::kMousewheel});
++  }
++}
++
++void BrowserView::HandleSpacesWheelEvent(const ui::MouseWheelEvent* event) {
++  const int x_offset = event->x_offset();
++  if (x_offset == 0) {
++    return;
++  }
++
++  auto* controller = HydrogenSpacesController::From(browser_);
++  if (!controller || !controller->IsEnabled()) {
++    return;
++  }
++
++  const std::vector<HydrogenSpace>& spaces = controller->GetSpaces();
++  if (spaces.size() < 2) {
++    return;
++  }
++
++  // A two-finger swipe arrives as a burst of wheel events. Accumulate the
++  // horizontal offset, resetting on direction changes, and switch exactly
++  // once per swipe once the offset crosses a threshold.
++  const bool same_direction =
++      spaces_swipe_accumulated_offset_ == 0 ||
++      (spaces_swipe_accumulated_offset_ > 0) == (x_offset > 0);
++  spaces_swipe_accumulated_offset_ =
++      same_direction ? spaces_swipe_accumulated_offset_ + x_offset : x_offset;
++
++  constexpr int kSwipeThreshold = 60;
++  if (std::abs(spaces_swipe_accumulated_offset_) < kSwipeThreshold) {
++    return;
++  }
++  spaces_swipe_accumulated_offset_ = 0;
++
++  constexpr base::TimeDelta kMinSwipeInterval = base::Milliseconds(250);
++  const base::TimeTicks now = base::TimeTicks::Now();
++  if (!last_spaces_switch_timestamp_.is_null() &&
++      now - last_spaces_switch_timestamp_ < kMinSwipeInterval) {
++    return;
++  }
++  last_spaces_switch_timestamp_ = now;
++
++  const int direction = x_offset > 0 ? 1 : -1;
++  const std::string& active_id = controller->GetActiveSpaceId();
++  int active_index = 0;
++  for (size_t i = 0; i < spaces.size(); ++i) {
++    if (spaces[i].id == active_id) {
++      active_index = static_cast<int>(i);
++      break;
++    }
+   }
++  const int next_index =
++      (active_index + direction + static_cast<int>(spaces.size())) %
++      static_cast<int>(spaces.size());
++  controller->ActivateSpace(spaces[next_index].id);
+ }
+ 
+ void BrowserView::StartZenCollapseTimer(base::TimeDelta delay) {
+@@ -5583,6 +5658,14 @@
+     OnToolbarTabStripStateChanged(hydrogen_layout_controller);
+   } else {
+     UpdateZenModeState();
++  }
++
++  if (auto* spaces_controller = HydrogenSpacesController::From(browser_)) {
++    hydrogen_spaces_subscription_ =
++        spaces_controller->RegisterOnStateChanged(
++            base::BindRepeating(&BrowserView::OnSpacesStateChanged,
++                                weak_ptr_factory_.GetWeakPtr()));
++    OnSpacesStateChanged();
+   }
+ 
+   UpdateTabSearchBubbleHost();
+@@ -6657,6 +6740,9 @@
+ }
+ 
+ void BrowserView::OnEvent(const ui::Event& event) {
++  if (event.IsMouseWheelEvent()) {
++    HandleSpacesWheelEvent(event.AsMouseWheelEvent());
++  }
+   if (!zen_mode_enabled_ || !event.IsMouseEvent()) {
+     return;
+   }
+
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -33,6 +33,7 @@
+ #include "ui/views/focus/focus_manager.h"
+ 
+ class BrowserView;
++class HydrogenSpaceDockView;
+ class VerticalTabStripBottomContainer;
+ class ShadowFrameView;
+ 
+@@ -235,6 +236,7 @@
+   bool zen_mode_floating_style_ = false;
+ 
+   raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
++  raw_ptr<HydrogenSpaceDockView> hydrogen_space_dock_view_ = nullptr;
+   raw_ptr<views::View> gemini_button_ = nullptr;
+   raw_ptr<views::ResizeArea> resize_area_ = nullptr;
+   raw_ptr<ShadowFrameView> shadow_frame_ = nullptr;
+
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -27,6 +27,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
+ #include "chrome/browser/ui/tabs/features.h"
+@@ -41,6 +42,7 @@
+ #include "chrome/browser/ui/views/frame/shadow_frame_view.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/hydrogen/frame_corner_radius.h"
++#include "chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.h"
+ #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/root_tab_collection_node.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+@@ -142,6 +144,14 @@
+       gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding,
+                         0, region_horizontal_padding));
+ 
++  if (auto* spaces_controller =
++          HydrogenSpacesController::From(browser_view->browser())) {
++    hydrogen_space_dock_view_ = AddChildViewAt(
++        std::make_unique<HydrogenSpaceDockView>(spaces_controller), 0);
++    hydrogen_space_dock_view_->SetCollapsed(
++        state_controller_->IsCollapsed());
++  }
++
+   gemini_button_ = AddChildView(std::make_unique<views::View>());
+ 
+   resize_area_ = AddChildView(std::make_unique<views::ResizeArea>(this));
+@@ -804,6 +814,13 @@
+ 
+ void VerticalTabStripRegionView::OnCollapseStateChanged(
+     tabs::VerticalTabStripCollapseState state) {
++  // The dock row is only shown while the strip is expanded, so it does not
++  // overflow the collapsed width.
++  if (hydrogen_space_dock_view_) {
++    hydrogen_space_dock_view_->SetCollapsed(
++        state == tabs::VerticalTabStripCollapseState::kCollapsed);
++  }
++
+   // Apply padding immediately at the start of the animation by including
+   // the collapsing state.
+   bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;
+diff --git a/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.h b/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.h
+new file mode 100644
+--- /dev/null
++++ b/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.h
+@@ -0,0 +1,106 @@
++// Copyright 2026 The Hydrogen Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_VIEWS_HYDROGEN_HYDROGEN_SPACE_DOCK_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_HYDROGEN_HYDROGEN_SPACE_DOCK_VIEW_H_
++
++#include <memory>
++#include <string>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/models/simple_menu_model.h"
++#include "ui/gfx/geometry/point.h"
++#include "ui/views/context_menu_controller.h"
++#include "ui/views/view.h"
++
++class HydrogenSpacesController;
++
++namespace views {
++class Button;
++class LabelButton;
++class MenuRunner;
++}  // namespace views
++
++// A row of colored "space" dots shown at the top of the vertical tab strip.
++// Clicking a dot activates its space, right-clicking opens a context menu to
++// delete it, and the trailing "+" button creates a new space. The row is
++// subtly tinted with the accent color of the active space.
++class HydrogenSpaceDockView : public views::View,
++                            public views::ContextMenuController,
++                            public ui::SimpleMenuModel::Delegate {
++  METADATA_HEADER(HydrogenSpaceDockView, views::View)
++
++ public:
++  explicit HydrogenSpaceDockView(HydrogenSpacesController* spaces_controller);
++  HydrogenSpaceDockView(const HydrogenSpaceDockView&) = delete;
++  HydrogenSpaceDockView& operator=(const HydrogenSpaceDockView&) = delete;
++  ~HydrogenSpaceDockView() override;
++
++  void OnSpacesChanged();
++
++  // Hides the dock while the tab strip is collapsed so the dot row does not
++  // overflow the collapsed width.
++  void SetCollapsed(bool collapsed);
++
++  // views::View:
++  void OnThemeChanged() override;
++
++  // views::ContextMenuController:
++  void ShowContextMenuForView(
++      views::View* source,
++      const gfx::Point& point,
++      ui::mojom::MenuSourceType source_type) override;
++
++  // ui::SimpleMenuModel::Delegate:
++  void ExecuteCommand(int command_id, int event_flags) override;
++  void OnMenuClosed(ui::SimpleMenuModel* source) override;
++
++ private:
++  // A single colored dot. The active space's dot is filled with the space
++  // accent; inactive dots are stroked outlines of their accent.
++  class DotButton : public views::Button {
++   public:
++    DotButton(HydrogenSpaceDockView* dock,
++              const std::string& space_id,
++              const std::u16string& name,
++              SkColor accent_color,
++              bool is_active);
++    ~DotButton() override;
++
++    void SetAccentColor(SkColor accent_color);
++    void SetActive(bool is_active);
++
++    const std::string& space_id() const { return space_id_; }
++
++    // views::Button:
++    void OnPaint(gfx::Canvas* canvas) override;
++
++   private:
++    const raw_ptr<HydrogenSpaceDockView> dock_;
++    const std::string space_id_;
++    SkColor accent_color_;
++    bool is_active_;
++  };
++
++  void RebuildDots();
++  void AddSpace();
++  void ActivateSpace(const std::string& space_id);
++  void DeleteSpace(const std::string& space_id);
++  void UpdateTint();
++  void UpdateVisibility();
++
++  const raw_ptr<HydrogenSpacesController> spaces_controller_;
++  base::CallbackListSubscription on_state_changed_subscription_;
++  bool collapsed_ = false;
++
++  raw_ptr<views::LabelButton> add_button_ = nullptr;
++  std::unique_ptr<ui::SimpleMenuModel> context_menu_model_;
++  std::unique_ptr<views::MenuRunner> context_menu_runner_;
++  std::string context_menu_space_id_;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_HYDROGEN_HYDROGEN_SPACE_DOCK_VIEW_H_
+diff --git a/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.cc b/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.cc
+new file mode 100644
+--- /dev/null
++++ b/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.cc
+@@ -0,0 +1,251 @@
++// Copyright 2026 The Hydrogen Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.h"
++
++#include <algorithm>
++#include <string>
++#include <utility>
++
++#include "cc/paint/paint_flags.h"
++#include "chrome/browser/ui/color/chrome_color_id.h"
++#include "chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h"
++#include "chrome/browser/ui/views/hydrogen/frame_corner_radius.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/mojom/menu_source_type.mojom.h"
++#include "ui/gfx/canvas.h"
++#include "ui/gfx/color_utils.h"
++#include "ui/gfx/geometry/point_f.h"
++#include "ui/views/background.h"
++#include "ui/views/controls/button/button.h"
++#include "ui/views/controls/button/label_button.h"
++#include "ui/views/controls/menu/menu_runner.h"
++#include "ui/views/layout/box_layout.h"
++
++namespace {
++
++constexpr int kDotDiameter = 10;
++constexpr float kDotStrokeWidth = 1.5f;
++constexpr int kDotButtonSize = 24;
++constexpr int kDockBetweenChildSpacing = 4;
++constexpr float kDockTintAlpha = 0.14f;
++constexpr int kDeleteSpaceCommandId = 1;
++
++// Accent palette cycled through for newly created spaces.
++constexpr SkColor kNewSpaceAccents[] = {
++    SkColorSetARGB(0xFF, 0x3B, 0x82, 0xF6),  // blue
++    SkColorSetARGB(0xFF, 0x22, 0xC5, 0x5E),  // green
++    SkColorSetARGB(0xFF, 0xF5, 0x9E, 0x0B),  // amber
++    SkColorSetARGB(0xFF, 0xA8, 0x5C, 0xF8),  // violet
++    SkColorSetARGB(0xFF, 0xEC, 0x48, 0x99),  // pink
++    SkColorSetARGB(0xFF, 0x00, 0xB5, 0xAD),  // teal
++};
++
++SkColor NextSpaceAccent(size_t space_count) {
++  if (space_count == 0) {
++    return kNewSpaceAccents[0];
++  }
++  return kNewSpaceAccents[(space_count - 1) % std::size(kNewSpaceAccents)];
++}
++
++}  // namespace
++
++HydrogenSpaceDockView::DotButton::DotButton(HydrogenSpaceDockView* dock,
++                                          const std::string& space_id,
++                                          const std::u16string& name,
++                                          SkColor accent_color,
++                                          bool is_active)
++    : views::Button(
++          base::BindRepeating(&HydrogenSpaceDockView::ActivateSpace,
++                              base::Unretained(dock), space_id)),
++      dock_(dock),
++      space_id_(space_id),
++      accent_color_(accent_color),
++      is_active_(is_active) {
++  SetAccessibleName(name);
++  SetTooltipText(name);
++  SetPreferredSize(gfx::Size(kDotButtonSize, kDotButtonSize));
++  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
++}
++
++HydrogenSpaceDockView::DotButton::~DotButton() = default;
++
++void HydrogenSpaceDockView::DotButton::SetAccentColor(SkColor accent_color) {
++  accent_color_ = accent_color;
++  SchedulePaint();
++}
++
++void HydrogenSpaceDockView::DotButton::SetActive(bool is_active) {
++  if (is_active_ == is_active) {
++    return;
++  }
++  is_active_ = is_active;
++  SchedulePaint();
++}
++
++void HydrogenSpaceDockView::DotButton::OnPaint(gfx::Canvas* canvas) {
++  views::Button::OnPaint(canvas);
++
++  const gfx::PointF center(width() / 2.f, height() / 2.f);
++  cc::PaintFlags flags;
++  flags.setAntiAlias(true);
++
++  if (IsMouseHovered()) {
++    flags.setColor(SkColorSetA(accent_color_, 0x28));
++    canvas->DrawCircle(center, kDotDiameter, flags);
++  }
++
++  if (is_active_) {
++    flags.setColor(accent_color_);
++    flags.setStyle(cc::PaintFlags::kFill_Style);
++    canvas->DrawCircle(center, kDotDiameter / 2.f, flags);
++  } else {
++    flags.setColor(SkColorSetA(accent_color_, 0xB8));
++    flags.setStyle(cc::PaintFlags::kStroke_Style);
++    flags.setStrokeWidth(kDotStrokeWidth);
++    canvas->DrawCircle(center, kDotDiameter / 2.f, flags);
++  }
++}
++
++HydrogenSpaceDockView::HydrogenSpaceDockView(
++    HydrogenSpacesController* spaces_controller)
++    : spaces_controller_(spaces_controller) {
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal,
++      gfx::Insets::VH(8, 8), kDockBetweenChildSpacing));
++
++  add_button_ = AddChildView(std::make_unique<views::LabelButton>(
++      base::BindRepeating(&HydrogenSpaceDockView::AddSpace,
++                          base::Unretained(this)),
++      u"+"));
++  add_button_->SetTooltipText(u"New space");
++  add_button_->SetAccessibleName(u"New space");
++  add_button_->SetPreferredSize(gfx::Size(kDotButtonSize, kDotButtonSize));
++  add_button_->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
++
++  on_state_changed_subscription_ =
++      spaces_controller_->RegisterOnStateChanged(
++          base::BindRepeating(
++              [](HydrogenSpaceDockView* dock) { dock->OnSpacesChanged(); },
++              base::Unretained(this)));
++
++  OnSpacesChanged();
++}
++
++HydrogenSpaceDockView::~HydrogenSpaceDockView() = default;
++
++void HydrogenSpaceDockView::OnSpacesChanged() {
++  RebuildDots();
++  UpdateTint();
++  UpdateVisibility();
++}
++
++void HydrogenSpaceDockView::SetCollapsed(bool collapsed) {
++  if (collapsed_ == collapsed) {
++    return;
++  }
++  collapsed_ = collapsed;
++  UpdateVisibility();
++}
++
++void HydrogenSpaceDockView::OnThemeChanged() {
++  views::View::OnThemeChanged();
++  UpdateTint();
++}
++
++void HydrogenSpaceDockView::ShowContextMenuForView(
++    views::View* source,
++    const gfx::Point& point,
++    ui::mojom::MenuSourceType source_type) {
++  if (source == add_button_) {
++    return;
++  }
++
++  const auto* dot = static_cast<DotButton*>(source);
++  context_menu_space_id_ = dot->space_id();
++
++  context_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
++  context_menu_model_->AddItem(
++      kDeleteSpaceCommandId,
++      l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_DELETE_GROUP));
++
++  context_menu_runner_ = std::make_unique<views::MenuRunner>(
++      context_menu_model_.get(), views::MenuRunner::CONTEXT_MENU |
++                                     views::MenuRunner::IS_NESTED);
++  context_menu_runner_->RunMenuAt(
++      source->GetWidget(), /*button_controller=*/nullptr,
++      gfx::Rect(point, gfx::Size()), views::MenuAnchorPosition::kTopLeft,
++      source_type);
++}
++
++void HydrogenSpaceDockView::ExecuteCommand(int command_id, int event_flags) {
++  if (command_id == kDeleteSpaceCommandId) {
++    DeleteSpace(context_menu_space_id_);
++  }
++}
++
++void HydrogenSpaceDockView::OnMenuClosed(ui::SimpleMenuModel* source) {
++  context_menu_runner_.reset();
++  context_menu_model_.reset();
++}
++
++void HydrogenSpaceDockView::RebuildDots() {
++  while (children().size() > 1) {
++    RemoveChildViewT(children().front());
++  }
++
++  const std::string active_id = spaces_controller_->GetActiveSpaceId();
++  for (const HydrogenSpace& space : spaces_controller_->GetSpaces()) {
++    auto* dot = AddChildView(std::make_unique<DotButton>(
++        this, space.id, space.name, space.accent_color,
++        space.id == active_id));
++    dot->set_context_menu_controller(this);
++  }
++
++  // The "+" button always stays at the trailing end of the row.
++  ReorderChildView(add_button_, children().size() - 1);
++  InvalidateLayout();
++}
++
++void HydrogenSpaceDockView::AddSpace() {
++  const size_t space_count = spaces_controller_->GetSpaces().size();
++  spaces_controller_->CreateSpace(u"Space", NextSpaceAccent(space_count));
++}
++
++void HydrogenSpaceDockView::ActivateSpace(const std::string& space_id) {
++  spaces_controller_->ActivateSpace(space_id);
++}
++
++void HydrogenSpaceDockView::DeleteSpace(const std::string& space_id) {
++  spaces_controller_->DeleteSpace(space_id);
++}
++
++void HydrogenSpaceDockView::UpdateTint() {
++  if (!GetWidget()) {
++    return;
++  }
++
++  const HydrogenSpace* active = spaces_controller_->GetActiveSpace();
++  if (!active || active->accent_color == SK_ColorTRANSPARENT) {
++    SetBackground(views::CreateSolidBackground(
++        GetColorProvider()->GetColor(ui::kColorToolbar)));
++    return;
++  }
++
++  const SkColor base =
++      GetColorProvider()->GetColor(ui::kColorToolbar);
++  const SkColor tint =
++      color_utils::AlphaBlend(active->accent_color, base, kDockTintAlpha);
++  SetBackground(
++      views::CreateRoundedRectBackground(tint, GetGenericFrameRadius()));
++  SchedulePaint();
++}
++
++void HydrogenSpaceDockView::UpdateVisibility() {
++  SetVisible(!collapsed_ && spaces_controller_->IsEnabled());
++}
++
++BEGIN_METADATA(HydrogenSpaceDockView)
++END_METADATA

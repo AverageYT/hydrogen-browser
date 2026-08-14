@@ -1,0 +1,33 @@
+--- a/net/base/registry_controlled_domains/effective_tld_names.dat
++++ b/net/base/registry_controlled_domains/effective_tld_names.dat
+@@ -10863,7 +10863,7 @@
+ // https://www.iana.org/domains/root/db/xn--45q11c.html
+ 八卦
+ 
+-// xn--4gbrim : Helium TLDs Ltd
++// xn--4gbrim : Hydrogen TLDs Ltd
+ // https://www.iana.org/domains/root/db/xn--4gbrim.html
+ موقع
+ 
+--- a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
++++ b/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
+@@ -689,7 +689,7 @@
+   passwords_data_.form_manager()->Save();
+   passwords_data_.OnSubmittedGeneratedPassword(
+       password_manager::ui::SAVE_CONFIRMATION_STATE, nullptr, form_to_update);
+-  // After adding a new username, confirmation helium bubble should appear.
++  // After adding a new username, confirmation hydrogen bubble should appear.
+   bubble_status_ = BubbleStatus::SHOULD_POP_UP;
+   UpdateBubbleAndIconVisibility();
+ }
+--- a/components/password_manager/core/browser/credential_manager_impl.cc
++++ b/components/password_manager/core/browser/credential_manager_impl.cc
+@@ -343,7 +343,7 @@
+     }
+   } else if (form.match_type) {
+     // Otherwise, if this is not a new password credential, update the existing
+-    // credential prompting confirmation helium bubble to the user. This will
++    // credential prompting confirmation hydrogen bubble to the user. This will
+     // also update the 'skip_zero_click' state, as we've gotten an explicit
+     // signal that the page understands the credential management API and so can
+     // be trusted to notify us when they sign the user out.

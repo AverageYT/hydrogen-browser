@@ -109,40 +109,6 @@
  }
  
  declare_args() {
---- a/third_party/devtools-frontend/src/front_end/BUILD.gn
-+++ b/third_party/devtools-frontend/src/front_end/BUILD.gn
-@@ -206,7 +206,6 @@ group("unittests") {
-     "panels/timeline:unittests",
-     "panels/timeline/components:unittests",
-     "panels/timeline/components/insights:unittests",
--    "panels/timeline/fixtures/traces",
-     "panels/timeline/overlays:unittests",
-     "panels/timeline/overlays/components:unittests",
-     "panels/timeline/track_appenders:unittests",
---- a/third_party/devtools-frontend/src/front_end/models/trace/lantern/core/BUILD.gn
-+++ b/third_party/devtools-frontend/src/front_end/models/trace/lantern/core/BUILD.gn
-@@ -39,5 +39,4 @@ ts_library("unittests") {
-     "../testing:bundle",
-   ]
- 
--  public_deps = [ "../../../../panels/timeline/fixtures/traces" ]
- }
---- a/third_party/devtools-frontend/src/front_end/models/trace/lantern/metrics/BUILD.gn
-+++ b/third_party/devtools-frontend/src/front_end/models/trace/lantern/metrics/BUILD.gn
-@@ -56,5 +56,4 @@ ts_library("unittests") {
-     "../testing:bundle",
-   ]
- 
--  public_deps = [ "../../../../panels/timeline/fixtures/traces" ]
- }
---- a/third_party/devtools-frontend/src/front_end/models/trace/lantern/simulation/BUILD.gn
-+++ b/third_party/devtools-frontend/src/front_end/models/trace/lantern/simulation/BUILD.gn
-@@ -53,5 +53,4 @@ ts_library("unittests") {
-     "../testing:bundle",
-   ]
- 
--  public_deps = [ "../../../../panels/timeline/fixtures/traces" ]
- }
 --- a/third_party/puffin/BUILD.gn
 +++ b/third_party/puffin/BUILD.gn
 @@ -121,7 +121,6 @@ test("puffin_unittests") {

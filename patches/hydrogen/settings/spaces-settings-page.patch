@@ -1,0 +1,125 @@
+--- a/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
++++ b/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
+@@ -37,3 +37,27 @@
+   </settings-toggle-button>
+ 
+ </settings-section>
++
++<settings-section page-title="$i18n{spacesSettingsTitle}">
++
++  <settings-toggle-button id="spacesEnabled"
++      pref="{{prefs.hydrogen.browser.spaces_enabled}}"
++      label="$i18n{enableSpaces}"
++      sub-label="$i18n{enableSpacesDescription}">
++  </settings-toggle-button>
++
++  <div class="cr-row hr">
++    <div class="flex cr-padded-text">
++      <div>$i18n{spacesMemorySaverInterval}</div>
++      <div class="secondary">$i18n{spacesMemorySaverIntervalDescription}</div>
++    </div>
++    <settings-slider id="memorySaverSlider"
++        pref="{{prefs.hydrogen.browser.spaces_memory_saver_interval}}"
++        ticks="[[spacesIntervalTicks_]]"
++        label-aria="$i18n{spacesMemorySaverInterval}"
++        label-min="$i18n{spacesIntervalSoon}"
++        label-max="$i18n{spacesIntervalLater}">
++    </settings-slider>
++  </div>
++
++</settings-section>
+--- a/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.ts
+@@ -3,13 +3,25 @@
+ // the terms of the GPL-3.0 license that can be found in the LICENSE file.
+ 
+ import '../controls/settings_toggle_button.js';
++import '../controls/settings_slider.js';
+ import '../settings_page/settings_section.js';
+ 
++import type {SliderTick} from 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
+ import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
+ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+ 
+ import {getTemplate} from './appearance_behavior_page.html.js';
+ 
++const SPACES_INTERVAL_TICKS: number[] = [1, 5, 15, 30, 60, 120];
++
++function spacesIntervalTicks(minutes: number[]): SliderTick[] {
++  return minutes.map(m => ({
++    value: m,
++    label: m >= 60 ? `${m / 60}h` : `${m}m`,
++    ariaValue: undefined,
++  }));
++}
++
+ const AppearanceBehaviorPageElementBase = PrefsMixin(PolymerElement);
+ 
+ export class AppearanceBehaviorPageElement extends
+@@ -21,6 +33,19 @@
+   static get template() {
+     return getTemplate();
+   }
++
++  static get properties() {
++    return {
++      /** Memory-saver interval options, in minutes. */
++      spacesIntervalTicks_: {
++        readOnly: true,
++        type: Array,
++        value: spacesIntervalTicks(SPACES_INTERVAL_TICKS),
++      },
++    };
++  }
++
++  declare private spacesIntervalTicks_: SliderTick[];
+ }
+ 
+ declare global {
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -206,6 +206,27 @@
+     <message name="IDS_SETTINGS_BEHAVIOR" desc="Name of the settings page which allows users to control browser behavior.">
+       Behavior
+     </message>
++    <message name="IDS_SETTINGS_SPACES" desc="Title of the spaces section of the Behavior settings page.">
++      Spaces
++    </message>
++    <message name="IDS_SETTINGS_ENABLE_SPACES" desc="Label for the toggle that enables or disables tab spaces.">
++      Enable spaces
++    </message>
++    <message name="IDS_SETTINGS_ENABLE_SPACES_DESCRIPTION" desc="Description of the toggle that enables or disables tab spaces.">
++      Organize tabs into named, color-coded spaces and switch between them with a two-finger swipe on the trackpad.
++    </message>
++    <message name="IDS_SETTINGS_SPACES_MEMORY_SAVER_INTERVAL" desc="Label for the slider that controls how long an inactive space's tabs wait before being offloaded.">
++      Offload inactive spaces after
++    </message>
++    <message name="IDS_SETTINGS_SPACES_MEMORY_SAVER_INTERVAL_DESCRIPTION" desc="Description of the memory saver interval slider.">
++      Tabs in spaces you are not using are put to sleep to save memory.
++    </message>
++    <message name="IDS_SETTINGS_SPACES_INTERVAL_SOONER" desc="Label for the left end of the memory saver interval slider.">
++      Sooner
++    </message>
++    <message name="IDS_SETTINGS_SPACES_INTERVAL_LATER" desc="Label for the right end of the memory saver interval slider.">
++      Later
++    </message>
+     <message name="IDS_SETTINGS_CUSTOM_WEB_ADDRESS" desc="Sub label describing an empty custom web address for the Show home button setting.">
+       Custom
+     </message>
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -557,6 +557,14 @@
+       {"appearancePageTitle", IDS_SETTINGS_APPEARANCE},
+       {"appearanceBehaviorPageTitle", IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR},
+       {"behaviorPageTitle", IDS_SETTINGS_BEHAVIOR},
++      {"spacesSettingsTitle", IDS_SETTINGS_SPACES},
++      {"enableSpaces", IDS_SETTINGS_ENABLE_SPACES},
++      {"enableSpacesDescription", IDS_SETTINGS_ENABLE_SPACES_DESCRIPTION},
++      {"spacesMemorySaverInterval", IDS_SETTINGS_SPACES_MEMORY_SAVER_INTERVAL},
++      {"spacesMemorySaverIntervalDescription",
++       IDS_SETTINGS_SPACES_MEMORY_SAVER_INTERVAL_DESCRIPTION},
++      {"spacesIntervalSoon", IDS_SETTINGS_SPACES_INTERVAL_SOONER},
++      {"spacesIntervalLater", IDS_SETTINGS_SPACES_INTERVAL_LATER},
+       {"ctrlTabMru", IDS_SETTINGS_CTRL_TAB_MRU},
+       {"customWebAddress", IDS_SETTINGS_CUSTOM_WEB_ADDRESS},
+       {"enterCustomWebAddress", IDS_SETTINGS_ENTER_CUSTOM_WEB_ADDRESS},

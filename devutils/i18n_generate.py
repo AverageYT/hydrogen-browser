@@ -1,8 +1,8 @@
-# Copyright 2026 The Helium Authors
+# Copyright 2026 The Hydrogen Authors
 # You can use, redistribute, and/or modify this source code under
 # the terms of the GPL-3.0 license that can be found in the LICENSE file.
 """
-String extraction from Helium patches for translation.
+String extraction from Hydrogen patches for translation.
 """
 
 import subprocess
@@ -143,12 +143,12 @@ def extract_strings(repo_root, platforms_dir):
             for source in extract_strings_from_hunk(hunk):
                 yield from to_source_format(patch.path, *source)
 
-    onboarding_path = platforms_dir / "onboarding" / "helium_onboarding_strings.grdp"
+    onboarding_path = platforms_dir / "onboarding" / "hydrogen_onboarding_strings.grdp"
     if onboarding_path.exists():
         onboarding_text = onboarding_path.read_text()
         for source in extract_strings_from_hunk(onboarding_text, True):
             yield from to_source_format(
-                'components/helium_onboarding/helium_onboarding_strings.grdp', *source)
+                'components/hydrogen_onboarding/hydrogen_onboarding_strings.grdp', *source)
 
 
 def run(args, repo_root):

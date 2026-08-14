@@ -1,0 +1,605 @@
+diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_ui_prefs.cc
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -134,7 +134,15 @@
+   registry->RegisterBooleanPref(prefs::kHydrogenCenteredLocationBar, false);
+ 
+   registry->RegisterBooleanPref(prefs::kHydrogenMinimalLocationBar, false);
++
++  registry->RegisterBooleanPref(prefs::kHydrogenSpacesEnabled, true);
++
++  registry->RegisterIntegerPref(prefs::kHydrogenSpacesMemorySaverInterval, 30);
++
++  registry->RegisterStringPref(prefs::kHydrogenSpacesList, std::string());
+ 
++  registry->RegisterStringPref(prefs::kHydrogenSpacesActive, std::string());
++
+   registry->RegisterBooleanPref(prefs::kHomePageIsNewTabPage, true,
+                                 pref_registration_flags);
+   registry->RegisterBooleanPref(prefs::kShowHomeButton, false,
+
+diff --git a/chrome/common/pref_names.h b/chrome/common/pref_names.h
+--- a/chrome/common/pref_names.h
++++ b/chrome/common/pref_names.h
+@@ -654,7 +654,23 @@
+ // A boolean pref set to true if a Home button to open the Home pages should be
+ // visible on the toolbar.
+ inline constexpr char kShowHomeButton[] = "browser.show_home_button";
++
++// A boolean pref set to true if Hydrogen Spaces (tab spaces) are enabled.
++inline constexpr char kHydrogenSpacesEnabled[] =
++    "hydrogen.browser.spaces_enabled";
++
++// An integer pref that stores, in minutes, the delay before the tabs of
++// inactive spaces are offloaded by the memory saver.
++inline constexpr char kHydrogenSpacesMemorySaverInterval[] =
++    "hydrogen.browser.spaces_memory_saver_interval";
+ 
++// A string pref that stores the JSON serialization of the spaces of the
++// profile, including their id, name and accent color.
++inline constexpr char kHydrogenSpacesList[] = "hydrogen.browser.spaces_list";
++
++// A string pref that stores the id of the active space of the profile.
++inline constexpr char kHydrogenSpacesActive[] = "hydrogen.browser.spaces_active";
++
+ // A boolean pref set to true if the Forward button should be visible on the
+ // toolbar.
+ inline constexpr char kShowForwardButton[] = "browser.show_forward_button";
+
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -373,6 +373,8 @@
+     "enterprise_startup_dialog.h",
+     "hydrogen/hydrogen_layout_state_controller.cc",
+     "hydrogen/hydrogen_layout_state_controller.h",
++    "hydrogen/hydrogen_spaces_controller.cc",
++    "hydrogen/hydrogen_spaces_controller.h",
+     "idle_bubble.h",
+     "managed_ui.cc",
+     "managed_ui.h",
+
+diff --git a/chrome/browser/ui/browser_window/public/browser_window_features.h b/chrome/browser/ui/browser_window/public/browser_window_features.h
+--- a/chrome/browser/ui/browser_window/public/browser_window_features.h
++++ b/chrome/browser/ui/browser_window/public/browser_window_features.h
+@@ -56,6 +56,7 @@
+ class FindBarOwner;
+ class FullscreenControlHost;
+ class HydrogenLayoutStateController;
++class HydrogenSpacesController;
+ class HistoryClustersSidePanelCoordinator;
+ class HistorySidePanelCoordinator;
+ class ImmersiveModeController;
+@@ -679,6 +680,7 @@
+   std::unique_ptr<BrowserUserEducationInterface> user_education_;
+   std::unique_ptr<VerticalTabIphController> vertical_tab_iph_controller_;
+   std::unique_ptr<HydrogenLayoutStateController> hydrogen_layout_state_controller_;
++  std::unique_ptr<HydrogenSpacesController> hydrogen_spaces_controller_;
+ 
+   std::unique_ptr<tabs::VerticalTabStripStateController>
+       vertical_tab_strip_state_controller_;
+
+diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+--- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -78,6 +78,7 @@
+ #include "chrome/browser/ui/focus/browser_focus_controller_webui.h"
+ #include "chrome/browser/ui/fullscreen/browser_window_fullscreen_controller.h"
+ #include "chrome/browser/ui/hydrogen/hydrogen_layout_state_controller.h"
++#include "chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h"
+ #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
+ #include "chrome/browser/ui/lens/lens_overlay_entry_point_controller.h"
+ #include "chrome/browser/ui/omnibox/ai_mode_page_action_controller.h"
+@@ -594,6 +595,10 @@
+         GetUserDataFactory().CreateInstance<HydrogenLayoutStateController>(
+             *browser, browser, profile->GetPrefs());
+ 
++    hydrogen_spaces_controller_ =
++        GetUserDataFactory().CreateInstance<HydrogenSpacesController>(
++            *browser, profile->GetPrefs());
++
+     if (tabs::IsVerticalTabsFeatureEnabled()) {
+       Browser* raw_browser = browser->GetBrowserForMigrationOnly();
+ 
+diff --git a/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h b/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h
+new file mode 100644
+--- /dev/null
++++ b/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h
+@@ -0,0 +1,119 @@
++// Copyright 2026 The Hydrogen Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_HYDROGEN_HYDROGEN_SPACES_CONTROLLER_H_
++#define CHROME_BROWSER_UI_HYDROGEN_HYDROGEN_SPACES_CONTROLLER_H_
++
++#include <map>
++#include <string>
++#include <vector>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++
++class BrowserWindowInterface;
++class PrefService;
++class TabStripModel;
++
++namespace content {
++class WebContents;
++}  // namespace content
++
++// A Hydrogen "space" is a named, accent-colored collection of tabs. Only one
++// space is active at a time; switching spaces swaps the visible tab set and,
++// after the memory-saver interval elapses, offloads the tabs that belong to
++// inactive spaces so that only the active space consumes memory.
++struct HydrogenSpace {
++  std::string id;
++  std::u16string name;
++  SkColor accent_color = SK_ColorTRANSPARENT;
++};
++
++// Owns the space model of a single browser window. Space metadata is
++// persisted in the profile prefs; the tab-to-space assignment is
++// session-scoped and is kept in memory only.
++class HydrogenSpacesController : public TabStripModelObserver {
++ public:
++  DECLARE_USER_DATA(HydrogenSpacesController);
++
++  HydrogenSpacesController(BrowserWindowInterface* browser_window,
++                         PrefService* pref_service);
++  HydrogenSpacesController(const HydrogenSpacesController&) = delete;
++  HydrogenSpacesController& operator=(const HydrogenSpacesController&) = delete;
++  ~HydrogenSpacesController();
++
++  static HydrogenSpacesController* From(BrowserWindowInterface* browser_window);
++
++  bool IsEnabled() const;
++  const std::vector<HydrogenSpace>& GetSpaces() const;
++  const std::string& GetActiveSpaceId() const;
++  const HydrogenSpace* GetActiveSpace() const;
++
++  // Delay after a space switch before inactive-space tabs are offloaded. A
++  // non-positive or disabled interval disables automatic offloading.
++  base::TimeDelta GetMemorySaverInterval() const;
++  int GetMemorySaverIntervalMinutes() const;
++
++  // Creates a new space, activates it, and persists it. The empty name is
++  // replaced with "Space".
++  void CreateSpace(const std::u16string& name, SkColor accent_color);
++  void RenameSpace(const std::string& space_id,
++                   const std::u16string& new_name);
++  void SetSpaceAccentColor(const std::string& space_id, SkColor accent_color);
++  // Deleting the active space activates the first remaining space. Deleting
++  // the last space is a no-op.
++  void DeleteSpace(const std::string& space_id);
++  void ActivateSpace(const std::string& space_id);
++
++  // Tab bookkeeping. Tabs that have no explicit space assigned are treated
++  // as belonging to the active space.
++  std::string GetSpaceForTab(content::WebContents* contents) const;
++  void SetTabSpace(content::WebContents* contents,
++                   const std::string& space_id);
++  int GetSpaceTabCount(const std::string& space_id) const;
++
++  // Offloads (discards) the eligible tabs of every space other than the
++  // active one. Used by the memory-saver timer and exposed for testing.
++  void DiscardTabsInInactiveSpaces();
++
++  using StateChangedCallback =
++      base::RepeatingCallback<void(HydrogenSpacesController*)>;
++  base::CallbackListSubscription RegisterOnStateChanged(
++      StateChangedCallback callback);
++
++ private:
++  // TabStripModelObserver:
++  void OnTabStripModelChanged(
++      TabStripModel* tab_strip_model,
++      const TabStripModelChange& change,
++      const TabStripSelectionChange& selection) override;
++
++  void LoadSpacesFromPrefs();
++  void SaveSpacesToPrefs();
++  void OnSpacePrefsChanged();
++  void RestartMemorySaverTimer();
++  void OnMemorySaverTimeout();
++  void NotifyStateChanged();
++
++  const raw_ptr<BrowserWindowInterface> browser_window_;
++  const raw_ptr<PrefService> pref_service_;
++
++  std::vector<HydrogenSpace> spaces_;
++  std::string active_space_id_;
++  std::map<raw_ptr<content::WebContents>, std::string> tab_spaces_;
++
++  base::OneShotTimer memory_saver_timer_;
++  PrefChangeRegistrar pref_change_registrar_;
++  base::RepeatingCallbackList<void(HydrogenSpacesController*)>
++      on_state_changed_callback_list_;
++  ui::ScopedUnownedUserData<HydrogenSpacesController> scoped_unowned_user_data_;
++};
++
++#endif  // CHROME_BROWSER_UI_HYDROGEN_HYDROGEN_SPACES_CONTROLLER_H_
+diff --git a/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.cc b/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.cc
+new file mode 100644
+--- /dev/null
++++ b/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.cc
+@@ -0,0 +1,373 @@
++// Copyright 2026 The Hydrogen Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++
++#include "chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h"
++
++#include <algorithm>
++#include <optional>
++#include <utility>
++
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/uuid.h"
++#include "base/values.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++
++namespace {
++
++constexpr char kDefaultSpaceId[] = "default";
++constexpr char16_t kDefaultSpaceName[] = u"Personal";
++constexpr SkColor kDefaultSpaceAccentColor =
++    SkColorSetARGB(0xFF, 0xEB, 0x55, 0x45);
++
++HydrogenSpace DefaultSpace() {
++  HydrogenSpace space;
++  space.id = kDefaultSpaceId;
++  space.name = kDefaultSpaceName;
++  space.accent_color = kDefaultSpaceAccentColor;
++  return space;
++}
++
++}  // namespace
++
++DEFINE_USER_DATA(HydrogenSpacesController);
++
++HydrogenSpacesController::HydrogenSpacesController(
++    BrowserWindowInterface* browser_window,
++    PrefService* pref_service)
++    : browser_window_(browser_window),
++      pref_service_(pref_service),
++      scoped_unowned_user_data_(browser_window->GetUnownedUserDataHost(),
++                                *this) {
++  pref_change_registrar_.Init(pref_service_);
++
++  pref_change_registrar_.AddMultiple(
++      {prefs::kHydrogenSpacesEnabled, prefs::kHydrogenSpacesMemorySaverInterval,
++       prefs::kHydrogenSpacesList, prefs::kHydrogenSpacesActive},
++      base::BindRepeating(&HydrogenSpacesController::OnSpacePrefsChanged,
++                          base::Unretained(this)));
++
++  if (TabStripModel* strip = browser_window_->GetTabStripModel()) {
++    strip->AddObserver(this);
++  }
++
++  LoadSpacesFromPrefs();
++  RestartMemorySaverTimer();
++}
++
++HydrogenSpacesController::~HydrogenSpacesController() {
++  if (TabStripModel* strip = browser_window_->GetTabStripModel()) {
++    strip->RemoveObserver(this);
++  }
++}
++
++// static
++HydrogenSpacesController* HydrogenSpacesController::From(
++    BrowserWindowInterface* browser_window) {
++  return Get(browser_window->GetUnownedUserDataHost());
++}
++
++bool HydrogenSpacesController::IsEnabled() const {
++  return pref_service_->GetBoolean(prefs::kHydrogenSpacesEnabled);
++}
++
++const std::vector<HydrogenSpace>& HydrogenSpacesController::GetSpaces() const {
++  return spaces_;
++}
++
++const std::string& HydrogenSpacesController::GetActiveSpaceId() const {
++  return active_space_id_;
++}
++
++const HydrogenSpace* HydrogenSpacesController::GetActiveSpace() const {
++  for (const HydrogenSpace& space : spaces_) {
++    if (space.id == active_space_id_) {
++      return &space;
++    }
++  }
++  return nullptr;
++}
++
++int HydrogenSpacesController::GetMemorySaverIntervalMinutes() const {
++  if (!IsEnabled()) {
++    return 0;
++  }
++  return std::max(0, pref_service_->GetInteger(
++                         prefs::kHydrogenSpacesMemorySaverInterval));
++}
++
++base::TimeDelta HydrogenSpacesController::GetMemorySaverInterval() const {
++  return base::Minutes(GetMemorySaverIntervalMinutes());
++}
++
++void HydrogenSpacesController::CreateSpace(const std::u16string& name,
++                                         SkColor accent_color) {
++  HydrogenSpace space;
++  space.id = base::Uuid::GenerateRandomV4().AsLowercaseString();
++  space.name = name.empty() ? u"Space" : name;
++  space.accent_color = accent_color;
++  spaces_.push_back(std::move(space));
++
++  SaveSpacesToPrefs();
++  ActivateSpace(spaces_.back().id);
++}
++
++void HydrogenSpacesController::RenameSpace(const std::string& space_id,
++                                         const std::u16string& new_name) {
++  for (HydrogenSpace& space : spaces_) {
++    if (space.id == space_id) {
++      space.name = new_name.empty() ? u"Space" : new_name;
++      SaveSpacesToPrefs();
++      NotifyStateChanged();
++      return;
++    }
++  }
++}
++
++void HydrogenSpacesController::SetSpaceAccentColor(const std::string& space_id,
++                                                 SkColor accent_color) {
++  for (HydrogenSpace& space : spaces_) {
++    if (space.id == space_id) {
++      space.accent_color = accent_color;
++      SaveSpacesToPrefs();
++      NotifyStateChanged();
++      return;
++    }
++  }
++}
++
++void HydrogenSpacesController::DeleteSpace(const std::string& space_id) {
++  if (spaces_.size() <= 1) {
++    return;
++  }
++
++  auto it = std::find_if(spaces_.begin(), spaces_.end(),
++                         [&space_id](const HydrogenSpace& space) {
++                           return space.id == space_id;
++                         });
++  if (it == spaces_.end()) {
++    return;
++  }
++
++  spaces_.erase(it);
++
++  if (active_space_id_ == space_id) {
++    active_space_id_ = spaces_.front().id;
++    pref_service_->SetString(prefs::kHydrogenSpacesActive, active_space_id_);
++  }
++
++  SaveSpacesToPrefs();
++  NotifyStateChanged();
++  RestartMemorySaverTimer();
++}
++
++void HydrogenSpacesController::ActivateSpace(const std::string& space_id) {
++  bool found = std::any_of(spaces_.begin(), spaces_.end(),
++                           [&space_id](const HydrogenSpace& space) {
++                             return space.id == space_id;
++                           });
++  if (!found) {
++    return;
++  }
++
++  active_space_id_ = space_id;
++  pref_service_->SetString(prefs::kHydrogenSpacesActive, active_space_id_);
++
++  // Surface the first tab of the newly active space so that switching spaces
++  // visibly changes the working tab set.
++  TabStripModel* strip = browser_window_->GetTabStripModel();
++  if (strip && strip->count() > 0) {
++    for (int i = 0; i < strip->count(); ++i) {
++      if (GetSpaceForTab(strip->GetWebContentsAt(i)) == space_id) {
++        strip->ActivateTabAt(i);
++        break;
++      }
++    }
++  }
++
++  NotifyStateChanged();
++  RestartMemorySaverTimer();
++}
++
++std::string HydrogenSpacesController::GetSpaceForTab(
++    content::WebContents* contents) const {
++  auto it = tab_spaces_.find(contents);
++  if (it != tab_spaces_.end()) {
++    return it->second;
++  }
++  return active_space_id_;
++}
++
++void HydrogenSpacesController::SetTabSpace(content::WebContents* contents,
++                                         const std::string& space_id) {
++  bool found = std::any_of(spaces_.begin(), spaces_.end(),
++                           [&space_id](const HydrogenSpace& space) {
++                             return space.id == space_id;
++                           });
++  if (!found) {
++    return;
++  }
++
++  tab_spaces_[contents] = space_id;
++}
++
++void HydrogenSpacesController::OnTabStripModelChanged(
++    TabStripModel* tab_strip_model,
++    const TabStripModelChange& change,
++    const TabStripSelectionChange& selection) {
++  switch (change.type()) {
++    case TabStripModelChange::kInserted:
++      for (const auto& contents_with_index : change.GetInsert()->contents) {
++        tab_spaces_[contents_with_index.contents] = active_space_id_;
++      }
++      break;
++    case TabStripModelChange::kReplaced:
++      if (const auto* replace = change.GetReplace()) {
++        auto it = tab_spaces_.find(replace->old_contents);
++        if (it != tab_spaces_.end()) {
++          tab_spaces_[replace->new_contents] = it->second;
++          tab_spaces_.erase(it);
++        }
++      }
++      break;
++    default:
++      break;
++  }
++}
++
++int HydrogenSpacesController::GetSpaceTabCount(
++    const std::string& space_id) const {
++  TabStripModel* strip = browser_window_->GetTabStripModel();
++  if (!strip) {
++    return 0;
++  }
++
++  int count = 0;
++  for (int i = 0; i < strip->count(); ++i) {
++    if (GetSpaceForTab(strip->GetWebContentsAt(i)) == space_id) {
++      ++count;
++    }
++  }
++  return count;
++}
++
++void HydrogenSpacesController::DiscardTabsInInactiveSpaces() {
++  if (!IsEnabled()) {
++    return;
++  }
++
++  TabStripModel* strip = browser_window_->GetTabStripModel();
++  if (!strip) {
++    return;
++  }
++
++  for (int i = 0; i < strip->count(); ++i) {
++    if (i == strip->active_index()) {
++      continue;
++    }
++    if (GetSpaceForTab(strip->GetWebContentsAt(i)) == active_space_id_) {
++      continue;
++    }
++    strip->ExecuteContextMenuCommand(i, TabStripModel::CommandDiscard);
++  }
++}
++
++base::CallbackListSubscription
++HydrogenSpacesController::RegisterOnStateChanged(
++    StateChangedCallback callback) {
++  return on_state_changed_callback_list_.Add(std::move(callback));
++}
++
++void HydrogenSpacesController::LoadSpacesFromPrefs() {
++  spaces_.clear();
++
++  const std::string raw = pref_service_->GetString(prefs::kHydrogenSpacesList);
++  if (!raw.empty()) {
++    std::optional<base::Value> parsed = base::JSONReader::Read(raw);
++    if (parsed && parsed->is_list()) {
++      for (const base::Value& item : parsed->GetList()) {
++        if (!item.is_dict()) {
++          continue;
++        }
++        const base::Value::Dict& dict = item.GetDict();
++        HydrogenSpace space;
++        if (const std::string* id = dict.FindString("id")) {
++          space.id = *id;
++        }
++        if (space.id.empty()) {
++          continue;
++        }
++        if (const std::string* name = dict.FindString("name")) {
++          space.name = base::UTF8ToUTF16(*name);
++        }
++        if (space.name.empty()) {
++          space.name = u"Space";
++        }
++        space.accent_color = static_cast<SkColor>(
++            dict.FindInt("accent").value_or(static_cast<int>(
++                kDefaultSpaceAccentColor)));
++        spaces_.push_back(std::move(space));
++      }
++    }
++  }
++
++  if (spaces_.empty()) {
++    spaces_.push_back(DefaultSpace());
++  }
++
++  active_space_id_ = pref_service_->GetString(prefs::kHydrogenSpacesActive);
++  bool active_found = std::any_of(spaces_.begin(), spaces_.end(),
++                                  [this](const HydrogenSpace& space) {
++                                    return space.id == active_space_id_;
++                                  });
++  if (!active_found) {
++    active_space_id_ = spaces_.front().id;
++  }
++}
++
++void HydrogenSpacesController::SaveSpacesToPrefs() {
++  base::Value::List list;
++  for (const HydrogenSpace& space : spaces_) {
++    base::Value::Dict dict;
++    dict.Set("id", space.id);
++    dict.Set("name", base::UTF16ToUTF8(space.name));
++    dict.Set("accent", static_cast<int>(space.accent_color));
++    list.Append(std::move(dict));
++  }
++  pref_service_->SetString(prefs::kHydrogenSpacesList,
++                           base::WriteJson(list).value_or("[]"));
++}
++
++void HydrogenSpacesController::OnSpacePrefsChanged() {
++  LoadSpacesFromPrefs();
++  NotifyStateChanged();
++  RestartMemorySaverTimer();
++}
++
++void HydrogenSpacesController::RestartMemorySaverTimer() {
++  memory_saver_timer_.Stop();
++
++  const base::TimeDelta interval = GetMemorySaverInterval();
++  if (!interval.is_positive()) {
++    return;
++  }
++
++  memory_saver_timer_.Start(
++      FROM_HERE, interval,
++      base::BindOnce(&HydrogenSpacesController::OnMemorySaverTimeout,
++                     base::Unretained(this)));
++}
++
++void HydrogenSpacesController::OnMemorySaverTimeout() {
++  DiscardTabsInInactiveSpaces();
++}
++
++void HydrogenSpacesController::NotifyStateChanged() {
++  on_state_changed_callback_list_.Notify(this);
++}
