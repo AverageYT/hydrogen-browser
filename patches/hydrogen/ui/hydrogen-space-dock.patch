@@ -211,22 +211,22 @@ diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/c
  #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
  #include "chrome/browser/ui/views/tabs/common/root_tab_collection_node.h"
  #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
-@@ -142,6 +144,14 @@
-       gfx::Insets::TLBR(kBottomContainerGap, region_horizontal_padding,
-                         0, region_horizontal_padding));
+@@ -153,3 +153,14 @@
+ resize_area_->GetViewAccessibility().SetRole(ax::mojom::Role::kSlider);
  
++  // The space dock is the bottom-most element of the vertical tab strip, so
++  // that the colored space dots sit along the bottom edge of the sidebar, in
++  // the spirit of Arc and Zen.
 +  if (auto* spaces_controller =
 +          HydrogenSpacesController::From(browser_view->browser())) {
-+    hydrogen_space_dock_view_ = AddChildViewAt(
-+        std::make_unique<HydrogenSpaceDockView>(spaces_controller), 0);
++    hydrogen_space_dock_view_ =
++        AddChildView(std::make_unique<HydrogenSpaceDockView>(spaces_controller));
 +    hydrogen_space_dock_view_->SetCollapsed(
 +        state_controller_->IsCollapsed());
 +  }
 +
-   gemini_button_ = AddChildView(std::make_unique<views::View>());
- 
-   resize_area_ = AddChildView(std::make_unique<views::ResizeArea>(this));
-@@ -804,6 +814,13 @@
+ state_controller_->SetDelegate(this);
+@@ -804,6 +817,13 @@
  
  void VerticalTabStripRegionView::OnCollapseStateChanged(
      tabs::VerticalTabStripCollapseState state) {
