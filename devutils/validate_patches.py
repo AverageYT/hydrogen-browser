@@ -138,7 +138,11 @@ def _deps_var(deps_globals):
 def _parse_deps(deps_text):
     """Returns a dict of parsed DEPS data"""
     deps_globals = {'__builtins__': None}
+    # Provide minimal callable shims expected in DEPS files (e.g., Var/Str)
     deps_globals['Var'] = _deps_var(deps_globals)
+    deps_globals['Str'] = lambda s: s
+    # Some DEPS may reference basic helper names; ensure they don't cause exec to fail
+    deps_globals['From'] = lambda *a, **k: None
     exec(deps_text, deps_globals) #pylint: disable=exec-used
     return deps_globals
 
