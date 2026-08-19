@@ -151,14 +151,14 @@
    if (base::FeatureList::IsEnabled(features::kIndigo)) {
 --- /dev/null
 +++ b/third_party/ublock/manifest.json
-@@ -0,0 +1,6 @@
-   "version": "1.72.2",
-   "web_accessible_resources": [
-     "/web_accessible_resources/*"
--  ]
+@@ -0,0 +1,9 @@
++{
++  "version": "1.72.2",
++  "web_accessible_resources": [
++    "/web_accessible_resources/*"
 +  ],
 +  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyqQYDhKkM6NlQjOgb11DpHQHsqvK4IMPDIDhvmR47JDGOrf/UyI6+wmx9MfMuqzUBFigip+57UUr+mWoWtI4eNga1zKb8wEphTDmm0Oo0NHInSlN5t8FmUEPjJ0WVf+CiwA3ucf32OAe+1akOLtMAgHqe4jax7k/b69miKDz3gvi7lEPmP+H4XDoQ3dOSgEHyjyP4Nf7QgPPrvK2zkB+8q17T0w2bTApETDDkr45K563pxBqb7i9JmYPP+sXQEB8qDevA5BlPAYBAINFZPOO+SOPpMUguOSA/eb1mjNcfLMGwJs1Zn5ejxqT3RgceqjrN86AgpQvCVeqFtcal/LZFwIDAQAB"
- }
++}
 --- a/third_party/ublock/assets/assets.json
 +++ b/third_party/ublock/assets/assets.json
 @@ -3,7 +3,6 @@
