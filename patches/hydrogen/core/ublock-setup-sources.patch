@@ -151,7 +151,7 @@
    if (base::FeatureList::IsEnabled(features::kIndigo)) {
 --- /dev/null
 +++ b/third_party/ublock/manifest.json
-@@ -114,5 +114,6 @@
+@@ -0,0 +1,6 @@
    "version": "1.72.2",
    "web_accessible_resources": [
      "/web_accessible_resources/*"
