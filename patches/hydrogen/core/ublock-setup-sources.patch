@@ -149,7 +149,7 @@
  
  #if !BUILDFLAG(IS_ANDROID)
    if (base::FeatureList::IsEnabled(features::kIndigo)) {
---- a/third_party/ublock/manifest.json
+--- /dev/null
 +++ b/third_party/ublock/manifest.json
 @@ -114,5 +114,6 @@
    "version": "1.72.2",
