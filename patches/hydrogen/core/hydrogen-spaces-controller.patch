@@ -495,8 +495,8 @@ new file mode 100644
 +      break;
 +    case TabStripModelChange::kRemoved:
 +      if (const auto* remove = change.GetRemove()) {
-+        for (const auto& contents : remove->contents) {
-+          tab_spaces_.erase(contents);
++        for (const auto& removed : remove->contents) {
++          tab_spaces_.erase(removed.contents);
 +        }
 +      }
 +      break;
@@ -593,6 +593,7 @@ new file mode 100644
 +                                  });
 +  if (!active_found) {
 +    active_space_id_ = spaces_.front().id;
++    pref_service_->SetString(prefs::kHydrogenSpacesActive, active_space_id_);
 +  }
 +}
 +
