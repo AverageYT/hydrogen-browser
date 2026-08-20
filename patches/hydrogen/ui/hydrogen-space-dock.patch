@@ -64,7 +64,7 @@ diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/v
  #include "chrome/browser/ui/layout_constants.h"
  #include "chrome/browser/ui/navigator/browser_navigator.h"
  #include "chrome/browser/ui/omnibox/omnibox_next_features.h"
-@@ -1887,7 +1888,81 @@
+@@ -1887,7 +1888,82 @@
      zen_mode_event_monitor_ = views::EventMonitor::CreateWindowMonitor(
          this, GetWidget()->GetNativeWindow(),
          {ui::EventType::kMouseMoved, ui::EventType::kMouseExited});
@@ -81,6 +81,7 @@ diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/v
 +  if (!GetWidget() || !spaces_enabled) {
 +    spaces_event_monitor_.reset();
 +    spaces_swipe_accumulated_offset_ = 0;
++    last_spaces_switch_timestamp_ = base::TimeTicks();
 +    return;
 +  }
 +
@@ -355,7 +356,7 @@ diff --git a/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.cc b/chro
 new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/views/hydrogen/hydrogen_space_dock_view.cc
-@@ -0,0 +1,251 @@
+@@ -0,0 +1,256 @@
 +// Copyright 2026 The Hydrogen Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -390,6 +391,7 @@ new file mode 100644
 +constexpr int kDockBetweenChildSpacing = 4;
 +constexpr float kDockTintAlpha = 0.14f;
 +constexpr int kDeleteSpaceCommandId = 1;
++constexpr int kMoveActiveTabCommandId = 2;
 +
 +// Accent palette cycled through for newly created spaces.
 +constexpr SkColor kNewSpaceAccents[] = {
@@ -528,6 +530,8 @@ new file mode 100644
 +  context_menu_model_->AddItem(
 +      kDeleteSpaceCommandId,
 +      l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_DELETE_GROUP));
++  context_menu_model_->AddItem(kMoveActiveTabCommandId,
++                               u"Move active tab here");
 +
 +  context_menu_runner_ = std::make_unique<views::MenuRunner>(
 +      context_menu_model_.get(), views::MenuRunner::CONTEXT_MENU |
@@ -541,6 +545,8 @@ new file mode 100644
 +void HydrogenSpaceDockView::ExecuteCommand(int command_id, int event_flags) {
 +  if (command_id == kDeleteSpaceCommandId) {
 +    DeleteSpace(context_menu_space_id_);
++  } else if (command_id == kMoveActiveTabCommandId) {
++    spaces_controller_->AssignActiveTabToSpace(context_menu_space_id_);
 +  }
 +}
 +
