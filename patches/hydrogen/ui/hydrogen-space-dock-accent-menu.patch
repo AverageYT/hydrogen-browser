@@ -37,10 +37,11 @@
  #include "ui/base/metadata/metadata_impl_macros.h"
  #include "ui/base/mojom/menu_source_type.mojom.h"
  #include "ui/gfx/canvas.h"
-@@ -32,6 +31,8 @@
+@@ -32,7 +31,9 @@
  constexpr int kDockBetweenChildSpacing = 4;
  constexpr float kDockTintAlpha = 0.14f;
  constexpr int kDeleteSpaceCommandId = 1;
+ constexpr int kMoveActiveTabCommandId = 2;
 +constexpr int kAccentMenuSubmenuCommandId = 99;
 +constexpr int kAccentMenuCommandIdStart = 100;
  
