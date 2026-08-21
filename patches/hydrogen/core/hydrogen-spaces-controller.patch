@@ -105,7 +105,7 @@ diff --git a/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h b/chrome/br
 new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.h
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,120 @@
 +// Copyright 2026 The Hydrogen Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -230,7 +230,7 @@ diff --git a/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.cc b/chrome/b
 new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.cc
-@@ -0,0 +1,373 @@
+@@ -0,0 +1,407 @@
 +// Copyright 2026 The Hydrogen Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
