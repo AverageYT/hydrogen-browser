@@ -139,6 +139,8 @@ def _parse_deps(deps_text):
     """Returns a dict of parsed DEPS data"""
     deps_globals = {'__builtins__': None}
     deps_globals['Var'] = _deps_var(deps_globals)
+    deps_globals['Str'] = lambda s: s
+    deps_globals['From'] = lambda *args, **kwargs: None
     exec(deps_text, deps_globals) #pylint: disable=exec-used
     return deps_globals
 
