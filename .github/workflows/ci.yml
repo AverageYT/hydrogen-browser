@@ -99,7 +99,12 @@ jobs:
           ./utils/downloads.py unpack -i deps.ini -c chromium_download_cache chromium_src
 
       - name: Validate patches
-        run: ./devutils/validate_patches.py -l chromium_src -v
+        run: |
+          if [ ! -f chromium_src/third_party/ublock/js/assets.js ]; then
+            ./utils/downloads.py unpack -i deps.ini -c chromium_download_cache chromium_src
+          fi
+          test -f chromium_src/third_party/ublock/js/assets.js
+          ./devutils/validate_patches.py -l chromium_src -v
 
       - name: Validate source file lists
         run: |
