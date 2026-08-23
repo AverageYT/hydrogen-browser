@@ -64,7 +64,7 @@ diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/v
  #include "chrome/browser/ui/layout_constants.h"
  #include "chrome/browser/ui/navigator/browser_navigator.h"
  #include "chrome/browser/ui/omnibox/omnibox_next_features.h"
-@@ -1887,7 +1888,82 @@
+@@ -1887,7 +1888,85 @@
      zen_mode_event_monitor_ = views::EventMonitor::CreateWindowMonitor(
          this, GetWidget()->GetNativeWindow(),
          {ui::EventType::kMouseMoved, ui::EventType::kMouseExited});
@@ -118,7 +118,10 @@ diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/v
 +      same_direction ? spaces_swipe_accumulated_offset_ + x_offset : x_offset;
 +
 +  constexpr int kSwipeThreshold = 60;
-+  if (std::abs(spaces_swipe_accumulated_offset_) < kSwipeThreshold) {
++  const int swipe_magnitude =
++      spaces_swipe_accumulated_offset_ < 0 ? -spaces_swipe_accumulated_offset_
++                                           : spaces_swipe_accumulated_offset_;
++  if (swipe_magnitude < kSwipeThreshold) {
 +    return;
 +  }
 +  spaces_swipe_accumulated_offset_ = 0;

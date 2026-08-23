@@ -96,7 +96,7 @@ diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.c
  
 +    hydrogen_spaces_controller_ =
 +        GetUserDataFactory().CreateInstance<HydrogenSpacesController>(
-+            *browser, profile->GetPrefs());
++            *browser, browser, profile->GetPrefs());
 +
      if (tabs::IsVerticalTabsFeatureEnabled()) {
        Browser* raw_browser = browser->GetBrowserForMigrationOnly();
