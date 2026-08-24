@@ -230,7 +230,7 @@ diff --git a/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.cc b/chrome/b
 new file mode 100644
 --- /dev/null
 +++ b/chrome/browser/ui/hydrogen/hydrogen_spaces_controller.cc
-@@ -0,0 +1,407 @@
+@@ -0,0 +1,408 @@
 +// Copyright 2026 The Hydrogen Authors
 +// You can use, redistribute, and/or modify this source code under
 +// the terms of the GPL-3.0 license that can be found in the LICENSE file.
@@ -554,13 +554,14 @@ new file mode 100644
 +
 +  const std::string raw = pref_service_->GetString(prefs::kHydrogenSpacesList);
 +  if (!raw.empty()) {
-+    std::optional<base::Value> parsed = base::JSONReader::Read(raw);
++    std::optional<base::Value> parsed =
++        base::JSONReader::Read(raw, 0);
 +    if (parsed && parsed->is_list()) {
 +      for (const base::Value& item : parsed->GetList()) {
 +        if (!item.is_dict()) {
 +          continue;
 +        }
-+        const base::Value::Dict& dict = item.GetDict();
++        const base::DictValue& dict = item.GetDict();
 +        HydrogenSpace space;
 +        if (const std::string* id = dict.FindString("id")) {
 +          space.id = *id;
@@ -598,7 +599,7 @@ new file mode 100644
 +}
 +
 +void HydrogenSpacesController::SaveSpacesToPrefs() {
-+  base::Value::List list;
++  base::ListValue list;
 +  for (const HydrogenSpace& space : spaces_) {
 +    base::Value::Dict dict;
 +    dict.Set("id", space.id);
