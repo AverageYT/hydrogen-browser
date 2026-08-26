@@ -601,7 +601,7 @@ new file mode 100644
 +void HydrogenSpacesController::SaveSpacesToPrefs() {
 +  base::ListValue list;
 +  for (const HydrogenSpace& space : spaces_) {
-+    base::Value::Dict dict;
++    base::DictValue dict;
 +    dict.Set("id", space.id);
 +    dict.Set("name", base::UTF16ToUTF8(space.name));
 +    dict.Set("accent", static_cast<int>(space.accent_color));
